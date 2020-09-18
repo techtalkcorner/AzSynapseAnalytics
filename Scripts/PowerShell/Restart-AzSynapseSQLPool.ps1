@@ -1,4 +1,4 @@
-﻿ <#
+ <#
 .History
    15/09/2020 - 1.0 - Initial release - David Alzamendi
 .Synopsis
@@ -11,10 +11,10 @@
     Module descriptions are in https://docs.microsoft.com/en-us/powershell/module/az.sql/?view=azps-4.6.1
 
 .PARAMETERS 
-•	ResourceGroupName: resource group name where the server is being hosted
-•	ServerName server name that needs to be restarted
-•	DatabaseName: database name that needs to be restarted
-•	Operation: it needs to be Start/Pause or Restart
+-	ResourceGroupName: resource group name where the server is being hosted
+-	ServerName server name that needs to be restarted
+-	DatabaseName: database name that needs to be restarted
+-	Operation: it needs to be Start/Pause or Restart
 
 
 
@@ -31,22 +31,47 @@ Operation parameter values:
 [CmdletBinding()]
 param (
    [Parameter(Mandatory=$true)]
-   [string]$ResourceGroupName ="",
+   [string]$ResourceGroupName ="rg-dataanalytics",
    
    [Parameter(Mandatory=$true)]
-   [string]$ServerName = "",
+   [string]$ServerName = "sql-dataanalytics",
 
    [Parameter(Mandatory=$true)]
-   [string]$DatabaseName = "",
+   [string]$DatabaseName = "syn-dataanalytics",
 
    [Parameter(Mandatory=$true)]
-   [string]$Operation = ""
+   [string]$Operation = "Restart"
 
 )
 
 
 Begin
-    {
+    {     
+    Write-Output "Connecting on $(Get-Date)"
+
+    #######################################################################
+    # If you are using an Automation Account, uncomment the following lines 
+    #######################################################################
+    <#
+    #Connect to Azure using the Run As Account
+    Try{
+        $servicePrincipalConnection=Get-AutomationConnection -Name "AzureRunAsConnection"
+        Connect-AzAccount  -ServicePrincipal -TenantId $servicePrincipalConnection.TenantId -ApplicationId $servicePrincipalConnection.ApplicationId -CertificateThumbprint $servicePrincipalConnection.CertificateThumbprint 
+    }
+    Catch {
+        if (!$servicePrincipalConnection){
+            $ErrorMessage = "Connection $connectionName not found."
+            throw $ErrorMessage
+        } else{
+            Write-Output -Message $_.Exception
+            throw $_.Exception
+        }
+    }
+    #> 
+    #######################################################################
+    # Finish Azure Automation Account Section
+    #######################################################################
+
 
     # Validation parameters
     $ArrayOperations = "Pause","Start","Restart"
@@ -57,72 +82,76 @@ Begin
     }
 
     # Start
-    write-host "Starting process on $(Get-Date)"
+    Write-Output "Starting process on $(Get-Date)"
 
-    $Status = Get-AzSqlDatabase –ResourceGroupName $ResourceGroupName –ServerName $ServerName –DatabaseName $DatabaseName | Select-Object Status | Format-Table -HideTableHeaders | Out-String 
+    Try{
+        $Status = Get-AzSqlDatabase –ResourceGroupName $ResourceGroupName –ServerName $ServerName –DatabaseName $DatabaseName | Select-Object Status | Format-Table -HideTableHeaders | Out-String 
+        $Status = $Status -replace "`t|`n|`r",""
+        Write-Output "The current status is "$Status.trim()" on $(Get-Date)" 
+    }
+    Catch {
+            Write-Output $_.Exception
+            throw $_.Exception
+        }
 
-
-}
-Process 
-    {
     # Start block
+    # Start
+    Write-Output "Starting $Operation on $(Get-Date)"
+
         if(($Operation -eq "Start") -and ($Status.trim() -ne "Online")){
-            write-host "Starting"$Operation "Operation"
+            Write-Output "Starting $Operation Operation"
 
                      try 
                     {  
-                        write-host "Starting on $(Get-Date)"
+                        Write-Output "Starting on $(Get-Date)"
                          Get-AzSqlDatabase –ResourceGroupName $ResourceGroupName –ServerName $ServerName –DatabaseName $DatabaseName | Resume-AzSqlDatabase
                     }
                     catch
                     {
-                         write-host "Error while executing "$Operation
+                        Write-Output "Error while executing "$Operation
                     }
 
   
         }
     # Pause block
         if(($Operation -eq "Pause") -and ($Status.trim() -ne "Paused")){
-            write-host "Starting"$Operation "Operation"
+            write-Output "Starting $Operation Operation"
 
                       try 
                     {  
-                        write-host "Pausing on $(Get-Date)"
+                        Write-Output "Pausing on $(Get-Date)"
                         Get-AzSqlDatabase –ResourceGroupName $ResourceGroupName –ServerName $ServerName –DatabaseName $DatabaseName | Suspend-AzSqlDatabase
                     }
                     catch
                     {
-                         write-host "Error while executing "$Operation
+                         Write-Output "Error while executing "$Operation
                     }
 
   
         }
         # Restart block
         if(($Operation -eq "Restart") -and ($Status.trim() -eq "Online")){
-            write-host "Starting"$Operation "Operation"
+            Write-Output "Starting $Operation Operation"
 
                     try 
                     {  
-                        write-host "Pausing on $(Get-Date)"
+                        Write-Output "Pausing on $(Get-Date)"
                         Get-AzSqlDatabase –ResourceGroupName $ResourceGroupName –ServerName $ServerName –DatabaseName $DatabaseName | Suspend-AzSqlDatabase
 
-                        write-host "Starting on $(Get-Date)"
+                        Write-Output "Starting on $(Get-Date)"
                         Get-AzSqlDatabase –ResourceGroupName $ResourceGroupName –ServerName $ServerName –DatabaseName $DatabaseName | Resume-AzSqlDatabase
                     }
                     catch
                     {
-                         write-host "Error while executing "$Operation
+                        Write-Output "Error while executing "$Operation
                     }
 
 
   
         }
-
-}
-
-End
-    {
-    # Exit
-        write-host "Finished process on $(Get-Date)"
     }
-
+End
+{
+    # Exit
+    Write-Output "Finished process on $(Get-Date)"
+}
